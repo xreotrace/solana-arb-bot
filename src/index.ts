@@ -1,6 +1,9 @@
 import * as dotenv from "dotenv";
 dotenv.config();
 
+console.log("RPC_URL:", process.env.RPC_URL);
+console.log("PRIVATE_KEY:", process.env.PRIVATE_KEY);
+
 import { checkRaydiumPrice } from "./raydium";
 import { checkOrcaPrice } from "./orca";
 import { calculateProfitPercent } from "./utils";
