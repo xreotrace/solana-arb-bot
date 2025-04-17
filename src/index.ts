@@ -4,13 +4,12 @@ dotenv.config();
 console.log("RPC_URL:", process.env.RPC_URL);
 console.log("PRIVATE_KEY:", process.env.PRIVATE_KEY);
 
-import { checkRaydiumPrice } from "./raydium";
-import { checkOrcaPrice } from "./orca";
+import { getJupiterPrice } from "./jupiter";
 import { calculateProfitPercent } from "./utils";
 import { simulateTrade } from "./simulator";
 import { tryRealTrade } from "./trade";
 
-const TOKENS = ["SOL/USDC", "SOL/USDT"];
+const TOKENS = ["SOL/USDC"];
 const MIN_PROFIT = parseFloat(process.env.MIN_PROFIT_PERCENT || "0.5");
 const TRADE_MODE = process.env.TRADE_MODE || "manual";
 
@@ -20,36 +19,70 @@ async function runBot() {
   );
   while (true) {
     for (const pair of TOKENS) {
-      const raydium = await checkRaydiumPrice(pair);
-      const orca = await checkOrcaPrice(pair);
+      const jupiterBuySell = await getJupiterPrice(pair); // buy base, sell quote
+      const jupiterSellBuy = await getJupiterPrice(
+        pair.split("/").reverse().join("/")
+      ); // buy quote, sell base
 
-      if (!raydium || !orca) continue;
+      if (!jupiterBuySell || !jupiterSellBuy) continue;
 
-      const profitRayToOrca = calculateProfitPercent(raydium.ask, orca.bid);
-      const profitOrcaToRay = calculateProfitPercent(orca.ask, raydium.bid);
+      const profitBuySell = calculateProfitPercent(
+        jupiterBuySell.ask,
+        jupiterBuySell.bid
+      );
+      const profitSellBuy = calculateProfitPercent(
+        jupiterSellBuy.ask,
+        jupiterSellBuy.bid
+      );
 
-      if (profitRayToOrca >= MIN_PROFIT) {
+      if (profitBuySell >= MIN_PROFIT) {
         console.log(
-          `📈 Arbitrage Found: Buy on Raydium at ${
-            raydium.ask
-          }, Sell on Orca at ${orca.bid} → Profit: ${profitRayToOrca.toFixed(
+          `📈 Arbitrage Found: Buy ${pair.split("/")[0]} at ${
+            jupiterBuySell.ask
+          }, Sell at ${jupiterBuySell.bid} → Profit: ${profitBuySell.toFixed(
             2
           )}%`
         );
-        await simulateTrade("Raydium", "Orca", pair, raydium.ask, orca.bid);
+        await simulateTrade(
+          "Jupiter",
+          "Jupiter",
+          pair,
+          jupiterBuySell.ask,
+          jupiterBuySell.bid
+        );
         if (TRADE_MODE === "auto")
-          await tryRealTrade("Raydium", "Orca", pair, raydium.ask, orca.bid);
+          await tryRealTrade(
+            "Jupiter",
+            "Jupiter",
+            pair,
+            jupiterBuySell.ask,
+            jupiterBuySell.bid
+          );
       }
 
-      if (profitOrcaToRay >= MIN_PROFIT) {
+      if (profitSellBuy >= MIN_PROFIT) {
         console.log(
-          `📈 Arbitrage Found: Buy on Orca at ${orca.ask}, Sell on Raydium at ${
-            raydium.bid
-          } → Profit: ${profitOrcaToRay.toFixed(2)}%`
+          `📈 Arbitrage Found: Buy ${pair.split("/")[1]} at ${
+            jupiterSellBuy.ask
+          }, Sell at ${jupiterSellBuy.bid} → Profit: ${profitSellBuy.toFixed(
+            2
+          )}%`
         );
-        await simulateTrade("Orca", "Raydium", pair, orca.ask, raydium.bid);
+        await simulateTrade(
+          "Jupiter",
+          "Jupiter",
+          pair.split("/").reverse().join("/"),
+          jupiterSellBuy.ask,
+          jupiterSellBuy.bid
+        );
         if (TRADE_MODE === "auto")
-          await tryRealTrade("Orca", "Raydium", pair, orca.ask, raydium.bid);
+          await tryRealTrade(
+            "Jupiter",
+            "Jupiter",
+            pair.split("/").reverse().join("/"),
+            jupiterSellBuy.ask,
+            jupiterSellBuy.bid
+          );
       }
     }
 

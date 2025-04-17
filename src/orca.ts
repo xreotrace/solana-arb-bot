@@ -14,9 +14,17 @@ export async function checkOrcaPrice(pair: string) {
       new Decimal("0.01") // 1% slippage
     );
 
+    const minOutputAmount = quote.getMinOutputAmount().toNumber();
+    if (minOutputAmount <= 0) {
+      console.log(
+        `⚠️ Invalid quote for ${pair} on Orca. Min output amount is 0 or less.`
+      );
+      return null;
+    }
+
     return {
-      bid: quote.getMinOutputAmount().toNumber(), // already normalized
-      ask: 1 / quote.getMinOutputAmount().toNumber(),
+      bid: minOutputAmount, // Already normalized
+      ask: 1 / minOutputAmount, // The ask price is the inverse of the bid
     };
   } catch (err: any) {
     console.error(`Orca price error for ${pair}:`, err.message);
@@ -31,6 +39,7 @@ function getPool(pair: string) {
     case "SOL/USDT":
       return orca.getPool(OrcaPoolConfig.SOL_USDT);
     default:
+      console.error(`❌ Unsupported pool: ${pair}`);
       throw new Error(`Unsupported pool: ${pair}`);
   }
 }
