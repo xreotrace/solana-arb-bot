@@ -4,8 +4,10 @@
     "@orca-so/sdk": "^1.2.26",
     "@solana/web3.js": "^1.43.0",
     "axios": "^1.8.4",
+    "bs58": "^6.0.0",
     "decimal.js": "^10.5.0",
-    "dotenv": "^16.5.0"
+    "dotenv": "^16.5.0",
+    "node-telegram-bot-api": "^0.66.0"
   },
   "devDependencies": {
     "ts-node": "^10.9.2",

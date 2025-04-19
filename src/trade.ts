@@ -4,7 +4,7 @@ import {
   PublicKey,
   VersionedTransaction,
 } from "@solana/web3.js";
-import * as bs58 from "bs58";
+import bs58 from "bs58";
 import fetch from "node-fetch";
 import Decimal from "decimal.js";
 
