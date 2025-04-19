@@ -26,6 +26,10 @@ function getJupiterSwapLink(base: string, quote: string) {
   return `https://jup.ag/swap/${base}-${quote}`;
 }
 
+function getPoolExplorerLink(ammKey: string | null) {
+  return ammKey ? `https://solscan.io/account/${ammKey}` : "N/A";
+}
+
 async function runBot() {
   console.log(
     `Starting Solana Arbitrage Bot with min profit ${MIN_PROFIT}%, mode=${TRADE_MODE}`
@@ -60,11 +64,15 @@ async function runBot() {
       if (profitBuySell >= MIN_PROFIT) {
         const buyLink = getJupiterSwapLink(base, quote);
         const sellLink = getJupiterSwapLink(quote, base);
+        const buyPoolLink = getPoolExplorerLink(jupiterBuySell.ammKey);
+        const sellPoolLink = getPoolExplorerLink(jupiterBuySell.ammKey);
 
         const msg = `📈 *Arbitrage Detected!*
 Pair: *${pair}*
 🔁 [Buy on Jupiter](${buyLink}) \`${jupiterBuySell.ask.toFixed(4)}\`
 🔁 [Sell on Jupiter](${sellLink}) \`${jupiterBuySell.bid.toFixed(4)}\`
+🔍 [Buy Pool](${buyPoolLink})
+🔍 [Sell Pool](${sellPoolLink})
 💰 Profit: *${profitBuySell.toFixed(2)}%*`;
 
         console.log(msg);
@@ -92,11 +100,15 @@ Pair: *${pair}*
       if (profitSellBuy >= MIN_PROFIT) {
         const buyLink = getJupiterSwapLink(quote, base);
         const sellLink = getJupiterSwapLink(base, quote);
+        const buyPoolLink = getPoolExplorerLink(jupiterBuySell.ammKey);
+        const sellPoolLink = getPoolExplorerLink(jupiterBuySell.ammKey);
 
         const msg = `📈 *Arbitrage Detected!*
 Pair: *${reversedPair}*
 🔁 [Buy on Jupiter](${buyLink}) \`${jupiterSellBuy.ask.toFixed(4)}\`
 🔁 [Sell on Jupiter](${sellLink}) \`${jupiterSellBuy.bid.toFixed(4)}\`
+🔍 [Buy Pool](${buyPoolLink})
+🔍 [Sell Pool](${sellPoolLink})
 💰 Profit: *${profitSellBuy.toFixed(2)}%*`;
 
         console.log(msg);

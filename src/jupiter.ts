@@ -32,12 +32,15 @@ export async function getJupiterPrice(pair: string, amountLamports: number) {
     const bid = outAmount / inputAmount;
     const ask = inputAmount / outAmount;
 
+    const ammKey = route.routePlan?.[0]?.swapInfo?.ammKey || null;
+
     return {
       bid,
       ask,
       inAmount: amountLamports,
       inputMint,
       outputMint,
+      ammKey,
     };
   } catch (err: any) {
     console.error(`Jupiter price error for ${pair}:`, err.message);
