@@ -10,9 +10,7 @@ import { sendTelegramMessage } from "./notifier";
 import { Connection, Keypair } from "@solana/web3.js";
 import { getSolBalance } from "./solana";
 import bs58 from "bs58";
-
-// console.log("RPC_URL:", process.env.RPC_URL);
-// console.log("PRIVATE_KEY:", process.env.PRIVATE_KEY);
+import readline from "readline";
 
 const TOKENS = ["SOL/USDC"];
 const MIN_PROFIT = parseFloat(process.env.MIN_PROFIT_PERCENT || "0.5");
@@ -30,14 +28,28 @@ function getPoolExplorerLink(ammKey: string | null) {
   return ammKey ? `https://solscan.io/account/${ammKey}` : "N/A";
 }
 
+function askYesNo(question: string): Promise<boolean> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() === "y");
+    });
+  });
+}
+
 async function runBot() {
   console.log(
-    `Starting Solana Arbitrage Bot with min profit ${MIN_PROFIT}%, mode=${TRADE_MODE}`
+    `🚀 Starting Solana Arbitrage Bot with min profit ${MIN_PROFIT}%, mode=${TRADE_MODE}`
   );
 
   while (true) {
     const solBalance = await getSolBalance(connection, keypair.publicKey);
-    const tradeAmountLamports = 1_000_000_000; // 1 SOL in lamports
+    const tradeAmountLamports = 1_000_000_000; // 1 SOL
 
     for (const pair of TOKENS) {
       const [base, quote] = pair.split("/");
@@ -51,16 +63,23 @@ async function runBot() {
 
       if (!jupiterBuySell || !jupiterSellBuy) continue;
 
+      console.log(`[BUY ➜ SELL] ${pair}`);
+      console.log(`Ask (Buy Price): ${jupiterBuySell.ask}`);
+      console.log(`Bid (Sell Price): ${jupiterBuySell.bid}`);
       const profitBuySell = calculateProfitPercent(
         jupiterBuySell.ask,
         jupiterBuySell.bid
       );
+
+      console.log(`[BUY ➜ SELL] ${pair}`);
+      console.log(`Ask (Buy Price): ${jupiterBuySell.ask}`);
+      console.log(`Bid (Sell Price): ${jupiterBuySell.bid}`);
       const profitSellBuy = calculateProfitPercent(
         jupiterSellBuy.ask,
         jupiterSellBuy.bid
       );
 
-      // Direct route: Buy base, Sell quote
+      // Buy base, Sell quote
       if (profitBuySell >= MIN_PROFIT) {
         const buyLink = getJupiterSwapLink(base, quote);
         const sellLink = getJupiterSwapLink(quote, base);
@@ -93,15 +112,30 @@ Pair: *${pair}*
             jupiterBuySell.ask,
             jupiterBuySell.bid
           );
+        } else if (TRADE_MODE === "manual") {
+          const confirmed = await askYesNo(
+            "⚠️ Do you want to execute this trade? (y/n): "
+          );
+          if (confirmed) {
+            await tryRealTrade(
+              "Jupiter",
+              "Jupiter",
+              pair,
+              jupiterBuySell.ask,
+              jupiterBuySell.bid
+            );
+          } else {
+            console.log("❌ Trade skipped.");
+          }
         }
       }
 
-      // Reversed route: Buy quote, Sell base
+      // Reversed: Buy quote, Sell base
       if (profitSellBuy >= MIN_PROFIT) {
         const buyLink = getJupiterSwapLink(quote, base);
         const sellLink = getJupiterSwapLink(base, quote);
-        const buyPoolLink = getPoolExplorerLink(jupiterBuySell.ammKey);
-        const sellPoolLink = getPoolExplorerLink(jupiterBuySell.ammKey);
+        const buyPoolLink = getPoolExplorerLink(jupiterSellBuy.ammKey);
+        const sellPoolLink = getPoolExplorerLink(jupiterSellBuy.ammKey);
 
         const msg = `📈 *Arbitrage Detected!*
 Pair: *${reversedPair}*
@@ -129,6 +163,21 @@ Pair: *${reversedPair}*
             jupiterSellBuy.ask,
             jupiterSellBuy.bid
           );
+        } else if (TRADE_MODE === "manual") {
+          const confirmed = await askYesNo(
+            "⚠️ Do you want to execute this trade? (y/n): "
+          );
+          if (confirmed) {
+            await tryRealTrade(
+              "Jupiter",
+              "Jupiter",
+              reversedPair,
+              jupiterSellBuy.ask,
+              jupiterSellBuy.bid
+            );
+          } else {
+            console.log("❌ Trade skipped.");
+          }
         }
       }
     }

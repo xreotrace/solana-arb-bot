@@ -1,6 +1,4 @@
-export function calculateProfitPercent(
-  buyPrice: number,
-  sellPrice: number
-): number {
-  return ((sellPrice - buyPrice) / buyPrice) * 100;
+export function calculateProfitPercent(buyPrice: number, sellPrice: number) {
+  const profit = sellPrice - buyPrice;
+  return (profit / buyPrice) * 100;
 }
