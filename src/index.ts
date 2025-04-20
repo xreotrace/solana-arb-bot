@@ -11,8 +11,8 @@ import { Connection, Keypair } from "@solana/web3.js";
 import { getSolBalance } from "./solana";
 import bs58 from "bs58";
 
-console.log("RPC_URL:", process.env.RPC_URL);
-console.log("PRIVATE_KEY:", process.env.PRIVATE_KEY);
+// console.log("RPC_URL:", process.env.RPC_URL);
+// console.log("PRIVATE_KEY:", process.env.PRIVATE_KEY);
 
 const TOKENS = ["SOL/USDC"];
 const MIN_PROFIT = parseFloat(process.env.MIN_PROFIT_PERCENT || "0.5");
