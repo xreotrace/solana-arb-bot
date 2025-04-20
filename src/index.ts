@@ -37,7 +37,7 @@ async function runBot() {
 
   while (true) {
     const solBalance = await getSolBalance(connection, keypair.publicKey);
-    const tradeAmountLamports = 1_000_000;
+    const tradeAmountLamports = 1_000_000_000; // 1 SOL in lamports
 
     for (const pair of TOKENS) {
       const [base, quote] = pair.split("/");
