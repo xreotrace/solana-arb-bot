@@ -1,8 +1,8 @@
-// src/logic/multiHopRouter.ts
-
 import { fetchQuote } from "../utils/jupiterClient";
 import { QuoteParams } from "../utils/jupiterClient";
 import { logQuote } from "../analytics/quoteLogger";
+import { logArbitrage } from "../analytics/arbitrageLogger";
+import { fetchSOLPriceUSD } from "../utils/priceFetcher";
 
 const TOKENS = {
   SOL: "So11111111111111111111111111111111111111112",
@@ -12,17 +12,9 @@ const TOKENS = {
   mSOL: "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",
 };
 
-const TOKEN_DECIMALS: Record<string, number> = {
-  [TOKENS.SOL]: 9,
-  [TOKENS.USDC]: 6,
-  [TOKENS.USDT]: 6,
-  [TOKENS.JUP]: 6,
-  [TOKENS.mSOL]: 9,
-};
-
 const tradeAmount = 2 * 1e9; // 2 SOL in lamports
-const slippageBps = 100; // 1%
-const MIN_PROFIT_USDC = parseFloat(process.env.TRADE_THRESHOLD_USDC || "0.01");
+const slippageBps = 100;
+const MIN_PROFIT_SOL = parseFloat(process.env.TRADE_THRESHOLD_SOL || "0.0001");
 
 const chains = [
   [TOKENS.SOL, TOKENS.USDC, TOKENS.JUP, TOKENS.SOL],
@@ -30,14 +22,13 @@ const chains = [
   [TOKENS.SOL, TOKENS.USDC, TOKENS.mSOL, TOKENS.SOL],
 ];
 
-export async function findBestMultiHopRoute(): Promise<any | null> {
+export async function findBestMultiHopRoute(): Promise<any[] | null> {
   let bestChain: any[] = [];
   let maxProfit = -Infinity;
 
   for (const path of chains) {
     let currentAmount = tradeAmount;
     let failed = false;
-    const stepLogs: any[] = [];
 
     for (let i = 0; i < path.length - 1; i++) {
       const inputMint = path[i];
@@ -46,7 +37,7 @@ export async function findBestMultiHopRoute(): Promise<any | null> {
       const config: QuoteParams = {
         inputMint,
         outputMint,
-        amount: Math.floor(currentAmount),
+        amount: currentAmount,
         slippageBps,
         enforceSingleTx: true,
         allowIntermediateMints: true,
@@ -55,15 +46,14 @@ export async function findBestMultiHopRoute(): Promise<any | null> {
 
       try {
         const quote = await fetchQuote(config);
-        if (!quote?.routePlan?.length || !quote.outAmount) {
+        if (!quote?.routePlan?.length) {
           failed = true;
           break;
         }
 
         const outAmount = parseFloat(quote.outAmount);
 
-        // Log raw step info
-        stepLogs.push({
+        logQuote({
           timestamp: new Date().toISOString(),
           inputMint,
           outputMint,
@@ -73,11 +63,13 @@ export async function findBestMultiHopRoute(): Promise<any | null> {
           reason: `Step ${i + 1}/${path.length - 1} in chain`,
         });
 
-        // Prepare input for next step
         currentAmount = outAmount;
       } catch (err: any) {
         console.error(
-          `❌ Failed on ${inputMint} → ${outputMint}:`,
+          "❌ Chain step failed:",
+          inputMint,
+          "→",
+          outputMint,
           err.message
         );
         failed = true;
@@ -85,27 +77,39 @@ export async function findBestMultiHopRoute(): Promise<any | null> {
       }
     }
 
-    if (!failed && stepLogs.length > 0) {
-      const first = stepLogs[0];
-      const last = stepLogs[stepLogs.length - 1];
+    if (!failed) {
+      const finalSOL = currentAmount / 1e9;
+      const initialSOL = tradeAmount / 1e9;
+      const profit = finalSOL - initialSOL;
 
-      // Convert input/output to SOL (1e9)
-      const inputSOL = first.inAmount / 1e9;
-      const finalSOL = last.outAmount / 1e9;
-      const profit = finalSOL - inputSOL;
-
-      for (const log of stepLogs) logQuote(log);
-
-      if (profit > MIN_PROFIT_USDC && profit > maxProfit) {
-        bestChain = path;
+      if (profit > MIN_PROFIT_SOL && profit > maxProfit) {
         maxProfit = profit;
+        bestChain = path;
       }
     }
   }
 
   if (bestChain.length) {
+    const finalSOL = tradeAmount / 1e9 + maxProfit;
+    const solPrice = await fetchSOLPriceUSD();
+    const usdProfit = maxProfit * solPrice;
+
     console.log("🚀 Best Chain:", bestChain.join(" → "));
-    console.log(`💰 Max Profit: ${maxProfit.toFixed(9)} SOL`);
+    console.log(
+      `💰 Max Profit: ${maxProfit.toFixed(6)} SOL ≈ $${usdProfit.toFixed(
+        4
+      )} USD`
+    );
+
+    logArbitrage({
+      timestamp: new Date().toISOString(),
+      chain: bestChain,
+      inAmountSOL: tradeAmount / 1e9,
+      outAmountSOL: finalSOL,
+      profitSOL: maxProfit,
+      profitUSD: usdProfit,
+    });
+
     return bestChain;
   } else {
     console.log("❌ No profitable chained route found.");
