@@ -12,13 +12,28 @@ export interface QuoteParams {
   allowIntermediateMints?: boolean;
 }
 
+let rateLimitDelayMs = 1000; // Initial backoff delay (1 second)
+let lastRequestTime = 0;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function fetchQuote(params: QuoteParams) {
+  const now = Date.now();
+  const waitTime = Math.max(0, rateLimitDelayMs - (now - lastRequestTime));
+  if (waitTime > 0) {
+    await sleep(waitTime);
+  }
+
   try {
+    lastRequestTime = Date.now();
+
     // Build a clean query without undefined values
     const query: any = {
       inputMint: params.inputMint,
       outputMint: params.outputMint,
-      amount: Math.floor(params.amount), // 🔐 Jupiter expects integer amounts
+      amount: Math.floor(params.amount),
       slippageBps: params.slippageBps ?? 100,
       enforceSingleTx: params.enforceSingleTx ?? true,
       allowIntermediateMints: params.allowIntermediateMints ?? true,
@@ -31,12 +46,22 @@ export async function fetchQuote(params: QuoteParams) {
       params: query,
     });
 
+    rateLimitDelayMs = 1000; // Reset on success
     return response.data;
   } catch (error: any) {
-    console.error(
-      "❌ Error fetching quote:",
-      error.response?.data || error.message
-    );
+    if (error.response?.status === 429) {
+      rateLimitDelayMs = Math.min(rateLimitDelayMs * 2, 10000); // exponential backoff, max 10s
+      console.warn(
+        "❌ Error 429: Rate limited. Backing off to",
+        rateLimitDelayMs,
+        "ms."
+      );
+    } else {
+      console.error(
+        "❌ Error fetching quote:",
+        error.response?.data || error.message
+      );
+    }
     throw error;
   }
 }
