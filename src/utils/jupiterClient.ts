@@ -1,3 +1,5 @@
+// src/utils/jupiterClient.ts
+
 import axios from "axios";
 
 const JUPITER_API_URL = "https://quote-api.jup.ag/v6";
@@ -29,7 +31,6 @@ export async function fetchQuote(params: QuoteParams) {
   try {
     lastRequestTime = Date.now();
 
-    // Build a clean query without undefined values
     const query: any = {
       inputMint: params.inputMint,
       outputMint: params.outputMint,
@@ -46,11 +47,11 @@ export async function fetchQuote(params: QuoteParams) {
       params: query,
     });
 
-    rateLimitDelayMs = 1000; // Reset on success
+    rateLimitDelayMs = 1000; // Reset backoff on success
     return response.data;
   } catch (error: any) {
     if (error.response?.status === 429) {
-      rateLimitDelayMs = Math.min(rateLimitDelayMs * 2, 10000); // exponential backoff, max 10s
+      rateLimitDelayMs = Math.min(rateLimitDelayMs * 2, 10000);
       console.warn(
         "❌ Error 429: Rate limited. Backing off to",
         rateLimitDelayMs,
@@ -84,4 +85,22 @@ export async function fetchSwapTx(route: any, userPublicKey: string) {
     );
     throw error;
   }
+}
+
+// 🛠️ Updated: Accept amount dynamically
+export async function getQuote(
+  inputMint: string,
+  outputMint: string,
+  amount: number
+): Promise<any> {
+  const params: QuoteParams = {
+    inputMint,
+    outputMint,
+    amount: Math.floor(amount),
+    slippageBps: 100,
+    enforceSingleTx: true,
+    allowIntermediateMints: true,
+    onlyDirectRoutes: false,
+  };
+  return await fetchQuote(params);
 }

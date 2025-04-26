@@ -7,6 +7,7 @@ import { generateSummary } from "./analytics/summaryReport";
 import { startScannerLoop } from "./loop/scanLoop";
 import { findBestMultiHopRoute } from "./logic/multiHopRouter";
 import { startLiveScanner } from "./logic/liveScanner";
+import { startSmartScanner } from "./logic/smartScanner";
 
 const program = new Command();
 
@@ -50,6 +51,13 @@ program
   .description("Start live multi-hop scanner loop")
   .action(() => {
     startLiveScanner();
+  });
+
+program
+  .command("smartscan")
+  .description("Start smart batch & multi-hop scanner loop")
+  .action(() => {
+    startSmartScanner();
   });
 
 program.parse();
