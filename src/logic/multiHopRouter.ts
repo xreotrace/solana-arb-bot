@@ -1,5 +1,6 @@
+// src/logic/multiHopRouter.ts
+
 import { fetchQuote } from "../utils/jupiterClient";
-import { QuoteParams } from "../utils/jupiterClient";
 import { logQuote } from "../analytics/quoteLogger";
 import { logArbitrage } from "../analytics/arbitrageLogger";
 import { fetchSOLPriceUSD } from "../utils/priceFetcher";
@@ -16,6 +17,9 @@ const tradeAmount = 2 * 1e9; // 2 SOL in lamports
 const slippageBps = 100;
 const MIN_PROFIT_SOL = parseFloat(process.env.TRADE_THRESHOLD_SOL || "0.0001");
 
+// ✅ Gas awareness constants
+const GAS_PER_SWAP_SOL = 0.00002; // assume ~0.00002 SOL gas cost per swap
+
 const chains = [
   [TOKENS.SOL, TOKENS.USDC, TOKENS.JUP, TOKENS.SOL],
   [TOKENS.SOL, TOKENS.USDT, TOKENS.JUP, TOKENS.SOL],
@@ -24,7 +28,7 @@ const chains = [
 
 export async function findBestMultiHopRoute(): Promise<any[] | null> {
   let bestChain: any[] = [];
-  let maxProfit = -Infinity;
+  let maxAdjustedProfit = -Infinity;
 
   for (const path of chains) {
     let currentAmount = tradeAmount;
@@ -34,18 +38,26 @@ export async function findBestMultiHopRoute(): Promise<any[] | null> {
       const inputMint = path[i];
       const outputMint = path[i + 1];
 
-      const config: QuoteParams = {
-        inputMint,
-        outputMint,
-        amount: currentAmount,
-        slippageBps,
-        enforceSingleTx: true,
-        allowIntermediateMints: true,
-        onlyDirectRoutes: false,
-      };
+      if (inputMint === outputMint) {
+        console.warn(
+          "⚠️ Skipping invalid path with identical mints:",
+          inputMint
+        );
+        failed = true;
+        break;
+      }
 
       try {
-        const quote = await fetchQuote(config);
+        const quote = await fetchQuote({
+          inputMint,
+          outputMint,
+          amount: currentAmount,
+          slippageBps,
+          enforceSingleTx: true,
+          allowIntermediateMints: true,
+          onlyDirectRoutes: false,
+        });
+
         if (!quote?.routePlan?.length) {
           failed = true;
           break;
@@ -80,34 +92,39 @@ export async function findBestMultiHopRoute(): Promise<any[] | null> {
     if (!failed) {
       const finalSOL = currentAmount / 1e9;
       const initialSOL = tradeAmount / 1e9;
-      const profit = finalSOL - initialSOL;
+      const rawProfit = finalSOL - initialSOL;
 
-      if (profit > MIN_PROFIT_SOL && profit > maxProfit) {
-        maxProfit = profit;
+      const gasCostSOL = (path.length - 1) * GAS_PER_SWAP_SOL;
+      const adjustedProfit = rawProfit - gasCostSOL;
+
+      if (
+        adjustedProfit > MIN_PROFIT_SOL &&
+        adjustedProfit > maxAdjustedProfit
+      ) {
+        maxAdjustedProfit = adjustedProfit;
         bestChain = path;
       }
     }
   }
 
   if (bestChain.length) {
-    const finalSOL = tradeAmount / 1e9 + maxProfit;
     const solPrice = await fetchSOLPriceUSD();
-    const usdProfit = maxProfit * solPrice;
+    const profitUSD = maxAdjustedProfit * solPrice;
 
     console.log("🚀 Best Chain:", bestChain.join(" → "));
     console.log(
-      `💰 Max Profit: ${maxProfit.toFixed(6)} SOL ≈ $${usdProfit.toFixed(
-        4
-      )} USD`
+      `💰 Net Profit (after gas): ${maxAdjustedProfit.toFixed(
+        6
+      )} SOL ≈ $${profitUSD.toFixed(4)} USD`
     );
 
     logArbitrage({
       timestamp: new Date().toISOString(),
       chain: bestChain,
       inAmountSOL: tradeAmount / 1e9,
-      outAmountSOL: finalSOL,
-      profitSOL: maxProfit,
-      profitUSD: usdProfit,
+      outAmountSOL: tradeAmount / 1e9 + maxAdjustedProfit,
+      profitSOL: maxAdjustedProfit,
+      profitUSD: profitUSD,
     });
 
     return bestChain;
