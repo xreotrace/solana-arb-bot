@@ -14,23 +14,16 @@ export interface QuoteParams {
   allowIntermediateMints?: boolean;
 }
 
-let rateLimitDelayMs = 1000; // Initial backoff delay (1 second)
-let lastRequestTime = 0;
+// Rate limit handling
+let rateLimitDelayMs = 1000; // Start with 1s delay after 429
+let lastRateLimitTime = 0;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function fetchQuote(params: QuoteParams) {
-  const now = Date.now();
-  const waitTime = Math.max(0, rateLimitDelayMs - (now - lastRequestTime));
-  if (waitTime > 0) {
-    await sleep(waitTime);
-  }
-
   try {
-    lastRequestTime = Date.now();
-
     const query: any = {
       inputMint: params.inputMint,
       outputMint: params.outputMint,
@@ -47,16 +40,23 @@ export async function fetchQuote(params: QuoteParams) {
       params: query,
     });
 
-    rateLimitDelayMs = 1000; // Reset backoff on success
+    // ✅ Success: Reset backoff
+    rateLimitDelayMs = 1000;
+    lastRateLimitTime = 0;
+
     return response.data;
   } catch (error: any) {
     if (error.response?.status === 429) {
+      // ✅ On 429: Start exponential backoff
       rateLimitDelayMs = Math.min(rateLimitDelayMs * 2, 10000);
+      lastRateLimitTime = Date.now();
+
       console.warn(
         "❌ Error 429: Rate limited. Backing off to",
         rateLimitDelayMs,
         "ms."
       );
+      await sleep(rateLimitDelayMs); // Sleep after 429 error
     } else {
       console.error(
         "❌ Error fetching quote:",
@@ -87,7 +87,7 @@ export async function fetchSwapTx(route: any, userPublicKey: string) {
   }
 }
 
-// 🛠️ Updated: Accept amount dynamically
+// 🛠️ Updated: Accept dynamic amount
 export async function getQuote(
   inputMint: string,
   outputMint: string,

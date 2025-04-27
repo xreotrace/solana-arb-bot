@@ -1,7 +1,5 @@
 // src/core/simulator.ts
 
-import { QuoteParams, fetchQuote } from "../utils/jupiterClient";
-
 export async function simulateTrade(tradeData: any) {
   console.log("🧪 Simulating trade with dry-run...");
 

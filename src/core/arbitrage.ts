@@ -6,10 +6,8 @@ import bs58 from "bs58";
 
 dotenv.config();
 
-const connection = new Connection(process.env.RPC_URL!);
-const userKeypair = Keypair.fromSecretKey(
-  bs58.decode(process.env.PRIVATE_KEY_BASE58!)
-);
+const connection = new Connection(process.env.RPC_ENDPOINT!);
+const userKeypair = Keypair.fromSecretKey(bs58.decode(process.env.SECRET_KEY!));
 
 const TRADE_CONFIG = {
   inputMint: "So11111111111111111111111111111111111111112", // SOL

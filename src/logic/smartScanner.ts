@@ -1,27 +1,27 @@
 // src/logic/smartScanner.ts
 
 import dotenv from "dotenv";
+dotenv.config();
+
 import { getQuote } from "../utils/jupiterClient";
 import { findBestMultiHopRoute } from "./multiHopRouter";
 import { logQuote } from "../analytics/quoteLogger";
 import { TOKENS } from "../utils/tokens";
 import { calculateNetProfit } from "../utils/profitCalculator";
-import { simulateTrade } from "../core/simulator"; // Add this import
-import { executeTrade } from "../core/swapExecutor"; // Add this import
-
-dotenv.config();
+import { simulateTrade } from "../core/simulator";
+import { executeTrade } from "../core/swapExecutor";
 
 const SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || "3000");
 const TRADE_AMOUNT_SOL = parseFloat(process.env.TRADE_AMOUNT_SOL || "2");
 const TRADE_AMOUNT_LAMPORTS = TRADE_AMOUNT_SOL * 1e9;
 const MIN_PROFIT_SOL = parseFloat(process.env.TRADE_THRESHOLD_SOL || "0.0001");
-const DRY_RUN_MODE = process.env.DRY_RUN_MODE === "true"; // <-- Add this
+const DRY_RUN_MODE = process.env.DRY_RUN_MODE === "true";
 
 const batchPairs = [
   { input: TOKENS.SOL, output: TOKENS.USDC },
   { input: TOKENS.SOL, output: TOKENS.mSOL },
   { input: TOKENS.SOL, output: TOKENS.USDT },
-  { input: TOKENS.SOL, output: TOKENS.SOL },
+  { input: TOKENS.SOL, output: TOKENS.JUP },
 ];
 
 interface ArbitrageOpportunity {
@@ -37,19 +37,22 @@ export async function startSmartScanner() {
     try {
       console.log("🔍 Scanning batch and multi-hop routes...");
 
-      const batchQuotesPromise = batchPairs.map((pair) =>
-        getQuote(pair.input, pair.output, TRADE_AMOUNT_LAMPORTS)
-      );
+      // 🛠️ Parallel batch quote sending
+      const batchQuotePromises = batchPairs
+        .filter((pair) => pair.input !== pair.output) // 🛡️ Skip identical input/output
+        .map((pair) =>
+          getQuote(pair.input, pair.output, TRADE_AMOUNT_LAMPORTS)
+        );
 
-      const batchResults = await Promise.allSettled(batchQuotesPromise);
+      const batchResults = await Promise.allSettled(batchQuotePromises);
 
       const batchOpportunities: ArbitrageOpportunity[] = batchResults
         .filter(
-          (r): r is PromiseFulfilledResult<any> =>
-            r.status === "fulfilled" && !!r.value
+          (result): result is PromiseFulfilledResult<any> =>
+            result.status === "fulfilled" && !!result.value
         )
-        .map((r) => {
-          const quote = r.value;
+        .map((result) => {
+          const quote = result.value;
           const profit = calculateNetProfit(quote);
           return {
             type: "batch",
@@ -72,7 +75,7 @@ export async function startSmartScanner() {
         }
       }
 
-      const allOpportunities = [...batchOpportunities];
+      const allOpportunities: ArbitrageOpportunity[] = [...batchOpportunities];
       if (multiHopOpportunity) {
         allOpportunities.push(multiHopOpportunity);
       }
@@ -109,7 +112,6 @@ export async function startSmartScanner() {
               reason: "Smart Scanner Batch Arbitrage",
             });
 
-            // 🛠️ Now take action
             if (DRY_RUN_MODE) {
               await simulateTrade(quote);
             } else {
@@ -137,7 +139,7 @@ export async function startSmartScanner() {
       console.error("❌ Error during smart scan:", err.message);
     }
 
-    await new Promise((res) => setTimeout(res, SCAN_INTERVAL_MS));
+    await new Promise((resolve) => setTimeout(resolve, SCAN_INTERVAL_MS));
   }
 }
 
