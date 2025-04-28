@@ -30,29 +30,63 @@ interface ArbitrageOpportunity {
   details: any;
 }
 
+// 🛠️ Fresh quote revalidation only for batch
+async function revalidateBatchOpportunity(
+  opportunity: ArbitrageOpportunity
+): Promise<boolean> {
+  if (opportunity.type !== "batch") return true; // Only batch needs revalidation
+
+  try {
+    const oldQuote = opportunity.details;
+    const freshQuote = await getQuote(
+      oldQuote.inAmountMint,
+      oldQuote.outAmountMint,
+      oldQuote.inAmount
+    );
+
+    const oldProfit = calculateNetProfit(oldQuote);
+    const newProfit = calculateNetProfit(freshQuote);
+
+    console.log(
+      `🔁 Revalidating batch opportunity... Old Profit: ${oldProfit.toFixed(
+        6
+      )} → New Profit: ${newProfit.toFixed(6)} SOL`
+    );
+
+    return newProfit > 0;
+  } catch (err: any) {
+    console.error("❌ Error during revalidation:", err.message);
+    return false;
+  }
+}
+
 export async function startSmartScanner() {
-  console.log("🤖 Starting smart arbitrage scanner...");
+  console.log("🤖 Starting optimized smart arbitrage scanner...");
 
   while (true) {
     try {
-      console.log("🔍 Scanning batch and multi-hop routes...");
+      console.log("🔍 Parallel scanning batch and multi-hop routes...");
 
-      // 🛠️ Parallel batch quote sending
       const batchQuotePromises = batchPairs
-        .filter((pair) => pair.input !== pair.output) // 🛡️ Skip identical input/output
+        .filter((pair) => pair.input !== pair.output)
         .map((pair) =>
           getQuote(pair.input, pair.output, TRADE_AMOUNT_LAMPORTS)
         );
 
-      const batchResults = await Promise.allSettled(batchQuotePromises);
+      const multiHopPromise = findBestMultiHopRoute();
+
+      const [batchResults, bestMultiHopRoute] = await Promise.all([
+        Promise.allSettled(batchQuotePromises),
+        multiHopPromise,
+      ]);
 
       const batchOpportunities: ArbitrageOpportunity[] = batchResults
         .filter(
-          (result): result is PromiseFulfilledResult<any> =>
-            result.status === "fulfilled" && !!result.value
+          (r): r is PromiseFulfilledResult<any> =>
+            r.status === "fulfilled" && !!r.value
         )
-        .map((result) => {
-          const quote = result.value;
+        .map((r) => {
+          const quote = r.value;
           const profit = calculateNetProfit(quote);
           return {
             type: "batch",
@@ -61,21 +95,16 @@ export async function startSmartScanner() {
           };
         });
 
-      const bestMultiHopRoute = await findBestMultiHopRoute();
-
       let multiHopOpportunity: ArbitrageOpportunity | null = null;
-      if (bestMultiHopRoute) {
-        const profitSOL = bestMultiHopRoute.profitSOL || 0;
-        if (profitSOL > 0) {
-          multiHopOpportunity = {
-            type: "multiHop",
-            profit: profitSOL,
-            details: bestMultiHopRoute,
-          };
-        }
+      if (bestMultiHopRoute && bestMultiHopRoute.profitSOL > 0) {
+        multiHopOpportunity = {
+          type: "multiHop",
+          profit: bestMultiHopRoute.profitSOL,
+          details: bestMultiHopRoute,
+        };
       }
 
-      const allOpportunities: ArbitrageOpportunity[] = [...batchOpportunities];
+      const allOpportunities = [...batchOpportunities];
       if (multiHopOpportunity) {
         allOpportunities.push(multiHopOpportunity);
       }
@@ -86,13 +115,28 @@ export async function startSmartScanner() {
 
         if (bestOpportunity && bestOpportunity.profit > MIN_PROFIT_SOL) {
           console.log(
-            "🏆 Best Opportunity:",
-            bestOpportunity.type,
-            "Profit:",
-            bestOpportunity.profit.toFixed(6),
-            "SOL"
+            `🏆 Best Opportunity: ${
+              bestOpportunity.type
+            } | Profit: ${bestOpportunity.profit.toFixed(6)} SOL`
           );
 
+          // 🛠️ Fresh revalidate batch quote
+          let isStillValid = true;
+          if (bestOpportunity.type === "batch") {
+            isStillValid = await revalidateBatchOpportunity(bestOpportunity);
+          }
+
+          if (!isStillValid) {
+            console.warn(
+              "⚠️ Opportunity no longer valid after fresh revalidation. Skipping execution."
+            );
+            await new Promise((resolve) =>
+              setTimeout(resolve, SCAN_INTERVAL_MS)
+            );
+            continue;
+          }
+
+          // ✅ Now simulate or execute
           if (bestOpportunity.type === "batch") {
             const quote = bestOpportunity.details;
             const timestamp = new Date().toISOString();
@@ -119,8 +163,9 @@ export async function startSmartScanner() {
             }
           } else if (bestOpportunity.type === "multiHop") {
             console.log(
-              "🛤️ Multi-Hop Arbitrage Found! Chain:",
-              bestOpportunity.details.chain.join(" → ")
+              `🛤️ Multi-Hop Arbitrage Found! Chain: ${bestOpportunity.details.chain.join(
+                " → "
+              )}`
             );
 
             if (DRY_RUN_MODE) {
