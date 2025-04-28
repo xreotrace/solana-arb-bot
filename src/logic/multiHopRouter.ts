@@ -5,11 +5,17 @@ import { logQuote } from "../analytics/quoteLogger";
 import { logArbitrage } from "../analytics/arbitrageLogger";
 import { fetchSOLPriceUSD } from "../utils/priceFetcher";
 import { generateSmartChains } from "../utils/chainGenerator";
+//import { MULTIHOP_CHAINS } from "../config/multihopChains";
 
 const TRADE_AMOUNT_SOL = parseFloat(process.env.TRADE_AMOUNT_SOL || "2");
 const CHAINS = generateSmartChains(TRADE_AMOUNT_SOL);
+//const CHAINS = MULTIHOP_CHAINS; // Use the predefined chains for now
 const SLIPPAGE_BPS = 100;
-const MIN_PROFIT_SOL = parseFloat(process.env.TRADE_THRESHOLD_SOL || "0.0001");
+const TRADE_THRESHOLD_PERCENT = parseFloat(
+  process.env.TRADE_THRESHOLD_PERCENT || "0.05"
+);
+const MIN_PROFIT_SOL = (TRADE_AMOUNT_SOL * TRADE_THRESHOLD_PERCENT) / 100;
+
 const GAS_PER_SWAP_SOL = 0.00002;
 
 export async function findBestMultiHopRoute(): Promise<{

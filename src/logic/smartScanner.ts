@@ -14,14 +14,17 @@ import { executeTrade } from "../core/swapExecutor";
 const SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || "3000");
 const TRADE_AMOUNT_SOL = parseFloat(process.env.TRADE_AMOUNT_SOL || "2");
 const TRADE_AMOUNT_LAMPORTS = TRADE_AMOUNT_SOL * 1e9;
-const MIN_PROFIT_SOL = parseFloat(process.env.TRADE_THRESHOLD_SOL || "0.0001");
+const TRADE_THRESHOLD_PERCENT = parseFloat(
+  process.env.TRADE_THRESHOLD_PERCENT || "0.05"
+);
+const MIN_PROFIT_SOL = (TRADE_AMOUNT_SOL * TRADE_THRESHOLD_PERCENT) / 100;
 const DRY_RUN_MODE = process.env.DRY_RUN_MODE === "true";
 
 const batchPairs = [
   { input: TOKENS.SOL, output: TOKENS.USDC },
-  { input: TOKENS.SOL, output: TOKENS.mSOL },
+  /* { input: TOKENS.SOL, output: TOKENS.mSOL },
   { input: TOKENS.SOL, output: TOKENS.USDT },
-  { input: TOKENS.SOL, output: TOKENS.JUP },
+  { input: TOKENS.SOL, output: TOKENS.JUP }, */
 ];
 
 interface ArbitrageOpportunity {

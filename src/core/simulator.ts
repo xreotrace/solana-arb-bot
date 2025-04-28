@@ -1,5 +1,11 @@
 // src/core/simulator.ts
 
+import dotenv from "dotenv";
+dotenv.config();
+
+// Dynamically load trade amount from .env
+const TRADE_AMOUNT_SOL = parseFloat(process.env.TRADE_AMOUNT_SOL || "2");
+
 export async function simulateTrade(tradeData: any) {
   console.log("🧪 Simulating trade with dry-run...");
 
@@ -15,11 +21,11 @@ export async function simulateTrade(tradeData: any) {
       estProfitSOL = outputAmountSOL - inputAmountSOL;
 
       console.log("📦 Batch Quote Detected!");
-    } else if (tradeData.inAmountSOL && tradeData.outAmountSOL) {
-      // 🛤️ Multi-hop route format (smartScanner structure)
-      inputAmountSOL = tradeData.inAmountSOL;
-      outputAmountSOL = tradeData.outAmountSOL;
-      estProfitSOL = outputAmountSOL - inputAmountSOL;
+    } else if (tradeData.chain && tradeData.profitSOL) {
+      // 🛤️ Multi-Hop route format
+      inputAmountSOL = TRADE_AMOUNT_SOL;
+      outputAmountSOL = TRADE_AMOUNT_SOL + tradeData.profitSOL;
+      estProfitSOL = tradeData.profitSOL;
 
       console.log("🛤️ Multi-Hop Route Detected!");
     } else {
